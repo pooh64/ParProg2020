@@ -27,7 +27,7 @@ double calc_thread(uint32_t x_beg, uint32_t x_end)
 {
 	uint32_t batch_sz = DIV_ROUND_UP((x_end - x_beg), N_BATCH);
 	double res = 0;
-	uint32_t tbeg = x_beg;
+	uint32_t tbeg = x_beg + batch_sz * (N_BATCH - 1);
 
 	for (uint32_t b = 0; b < N_BATCH; ++b) {
 		double tres = 0;
@@ -37,7 +37,7 @@ double calc_thread(uint32_t x_beg, uint32_t x_end)
 		for (uint32_t i = tend - 1; i >= tbeg; --i)
 			tres += (1.0 / i);
 
-		tbeg += batch_sz;
+		tbeg -= batch_sz;
 		res += tres;
 	}
 	return res;
