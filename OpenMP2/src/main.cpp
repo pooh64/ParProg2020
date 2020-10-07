@@ -62,7 +62,7 @@ double calc(uint32_t x_last, uint32_t num_threads)
 	}
 
 	double res = 0;
-	for (uint32_t i = 0; i < num_threads; ++i)
+	for (int32_t i = num_threads; i >= 0; --i)
 		res += arr[i].val;
 
 	free(arr);
