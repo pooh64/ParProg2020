@@ -4,14 +4,64 @@
 #include <omp.h>
 #include <cmath>
 
-double func(double x)
+inline double func(double x)
 {
   return sin(x);
 }
 
+#include <assert.h>
+struct __attribute__((aligned(64))) double_al {
+	double val;
+};
+
+#define DIV_ROUND_UP(a, b) ({	\
+	typeof((a)) __a = (a);	\
+	typeof((b)) __b = (b);	\
+	(__a + __b - 1) / __b;})
+
+double calc_thread(double x0, uint64_t s_beg, uint64_t s_end, double dx)
+{
+	if (s_beg > s_end)
+		return 0;
+
+	double res = 0;
+	s_end++;
+	for (uint64_t s = s_beg; s < s_end; ++s)
+		res += func(x0 + s * dx);
+	res -= 0.5 * (func(x0 + s_beg * dx) + func(x0 + (--s_end) * dx));
+	return res * dx;
+}
+
+/* slow, but needed only for last step */
+double calc_step(double x0, double x1)
+{
+	return 0.5 * (func(x0) + func(x1)) * (x1 - x0);
+}
+
 double calc(double x0, double x1, double dx, uint32_t num_threads)
 {
-  return 0;
+	double_al *arr = (double_al*) malloc(sizeof(*arr) * num_threads);
+	assert(arr);
+
+	uint64_t n_steps = (x1 - x0) / dx;
+	uint64_t batch_sz = DIV_ROUND_UP(n_steps, num_threads);
+
+	#pragma omp parallel num_threads(num_threads)
+	{
+		int tid = omp_get_thread_num();
+
+		uint64_t s_beg = batch_sz * tid;
+		uint64_t s_end = (tid == num_threads - 1) ? 
+			n_steps: s_beg + batch_sz;
+		arr[tid].val = calc_thread(x0, s_beg, s_end, dx);
+	}
+
+	double res = calc_step(x0 + n_steps * dx, x1);
+	for (uint32_t i = 0; i < num_threads; ++i)
+		res += arr[i].val;
+
+	free(arr);
+	return res;
 }
 
 int main(int argc, char** argv)
