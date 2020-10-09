@@ -51,7 +51,7 @@ double calc(double x0, double x1, double dx, uint32_t num_threads)
 		int tid = omp_get_thread_num();
 
 		uint64_t s_beg = batch_sz * tid;
-		uint64_t s_end = (tid == num_threads - 1) ? 
+		uint64_t s_end = ((uint32_t) tid == num_threads - 1) ? 
 			n_steps: s_beg + batch_sz;
 		arr[tid].val = calc_thread(x0, s_beg, s_end, dx);
 	}
