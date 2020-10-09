@@ -46,13 +46,10 @@ double calc(uint32_t x_last, uint32_t num_threads)
 	#pragma omp parallel num_threads(num_threads)
 	{
 		int tid = omp_get_thread_num();
-
 		uint32_t x_beg = 1 + batch_sz * tid;
 		uint32_t x_end = x_beg + batch_sz;
 		x_end = (x_end > x_last) ? x_last : x_end;
 		arr[tid] = calc_thread(x_beg, x_end);
-#pragma omp critical
-		printf("[%d] %8.8u %8.8u %8.8lg %8.8lg\n", tid, x_beg, x_end, arr[tid].sum, arr[tid].last);
 	}
 
 	double res = 1.0 + arr[0].sum;

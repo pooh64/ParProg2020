@@ -19,6 +19,18 @@ struct __attribute__((aligned(64))) double_al {
 	typeof((b)) __b = (b);	\
 	(__a + __b - 1) / __b;})
 
+inline double __attribute__((optimize("O0")))
+kahan_add(double sum, double v)
+{
+	double c = 0;
+	double y = v - c;
+	double t = sum + y;
+	c = (t - sum) - y;
+	return t;
+}
+
+#define KAHAN
+
 double calc_thread(double x0, uint64_t s_beg, uint64_t s_end, double dx)
 {
 	if (s_beg > s_end)
@@ -26,9 +38,19 @@ double calc_thread(double x0, uint64_t s_beg, uint64_t s_end, double dx)
 
 	double res = 0;
 	s_end++;
-	for (uint64_t s = s_beg; s < s_end; ++s)
+	for (uint64_t s = s_beg; s < s_end; ++s) {
+#ifdef KAHAN
+		res = kahan_add(res, func(x0 + s * dx));
+#else
 		res += func(x0 + s * dx);
-	res -= 0.5 * (func(x0 + s_beg * dx) + func(x0 + (--s_end) * dx));
+#endif
+	}
+	double tmp = -0.5 * (func(x0 + s_beg * dx) + func(x0 + (--s_end) * dx));
+#ifdef KAHAN
+	res = kahan_add(res, tmp);
+#else
+	res += tmp;
+#endif
 	return res * dx;
 }
 
@@ -38,9 +60,23 @@ double calc_step(double x0, double x1)
 	return 0.5 * (func(x0) + func(x1)) * (x1 - x0);
 }
 
+double __attribute__((optimize("O0"))) 
+kahan_sum(double_al *arr, size_t arr_sz) {
+	double sum = 0;
+	double c = 0;
+	double y, t;
+	for (size_t i = 0; i < arr_sz; ++i) {
+		y = arr[i].val - c;
+		t = sum + y;
+		c = (t - sum) - y;
+		sum = t;
+	}
+	return sum;
+}
+
 double calc(double x0, double x1, double dx, uint32_t num_threads)
 {
-	double_al *arr = (double_al*) malloc(sizeof(*arr) * num_threads);
+	double_al *arr = (double_al*) malloc(sizeof(*arr) * (num_threads + 1));
 	assert(arr);
 
 	uint64_t n_steps = (x1 - x0) / dx;
@@ -56,10 +92,8 @@ double calc(double x0, double x1, double dx, uint32_t num_threads)
 		arr[tid].val = calc_thread(x0, s_beg, s_end, dx);
 	}
 
-	double res = calc_step(x0 + n_steps * dx, x1);
-	for (uint32_t i = 0; i < num_threads; ++i)
-		res += arr[i].val;
-
+	arr[num_threads].val = calc_step(x0 + n_steps * dx, x1);
+	double res = kahan_sum(arr, num_threads + 1);
 	free(arr);
 	return res;
 }
