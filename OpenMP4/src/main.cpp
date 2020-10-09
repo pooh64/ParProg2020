@@ -42,7 +42,7 @@ int main(int argc, char** argv)
   double res = calc(x_last, num_threads);
 
   // Write result
-  output << std::setprecision(15) << res << std::endl;
+  output << std::setprecision(16) << res << std::endl;
   // Prepare to exit
   output.close();
   input.close();
