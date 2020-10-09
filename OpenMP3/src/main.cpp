@@ -76,7 +76,7 @@ kahan_sum(double_al *arr, size_t arr_sz) {
 
 double calc(double x0, double x1, double dx, uint32_t num_threads)
 {
-	double_al *arr = (double_al*) malloc(sizeof(*arr) * (num_threads + 1));
+	double_al *arr = (double_al*) malloc(sizeof(*arr) * num_threads);
 	assert(arr);
 
 	uint64_t n_steps = (x1 - x0) / dx;
@@ -92,8 +92,9 @@ double calc(double x0, double x1, double dx, uint32_t num_threads)
 		arr[tid].val = calc_thread(x0, s_beg, s_end, dx);
 	}
 
-	arr[num_threads].val = calc_step(x0 + n_steps * dx, x1);
-	double res = kahan_sum(arr, num_threads + 1);
+	double res = calc_step(x0 + n_steps * dx, x1);
+	for (uint32_t i = 0; i < num_threads; ++i)
+		res = kahan_add(res, arr[i].val);
 	free(arr);
 	return res;
 }
