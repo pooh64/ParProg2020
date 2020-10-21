@@ -22,9 +22,13 @@ double calc_thread(uint32_t x_beg, uint32_t x_end)
 	return res;
 }
 #else
+/* kahan-sum alternative: */
 #define N_BATCH 64
 double calc_thread(uint32_t x_beg, uint32_t x_end)
 {
+	if (x_beg >= x_end)
+		return 0;
+
 	uint32_t batch_sz = DIV_ROUND_UP((x_end - x_beg), N_BATCH);
 	double res = 0;
 	uint32_t tbeg = x_beg + batch_sz * (N_BATCH - 1);

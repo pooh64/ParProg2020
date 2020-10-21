@@ -1,11 +1,14 @@
 #! /bin/bash
 # run.sh <number of repetitions>
 compiler="g++"
-flags="-fopenmp -std=c++11 -Wall -Wextra -Werror"
+flags="-fopenmp -std=gnu++11 -O3 -g -Wall -Wextra -Werror"
 src="./src/main.cpp"
 build="./build"
 exe="$build/task"
 tests_dir="./tests"
+omp_env="OMP_PLACES=threads"
+
+export $omp_env
 
 echo "[CLEAR]"
 echo "  rm $build -r"
@@ -28,7 +31,7 @@ FAIL_TESTS=()
 for test_dir in $tests_dir/*; do
   test=$(basename $test_dir)
   printf "\n[TEST $test]\n"
-  echo "  $exe $test_dir/input.txt $build/$test.txt"
+  echo "$omp_env  $exe $test_dir/input.txt $build/$test.txt"
   START=$(date +%s%N)
   $exe $test_dir/input.txt $build/$test.txt
   END=$(date +%s%N)
