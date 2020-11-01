@@ -70,20 +70,42 @@ eval_line(uint8_t *lin[3], uint8_t *lout[3], int len, int beg, int end)
 #undef EVAL_ITER
 }
 
-void calc_iter(int len, int h, int beg, int end, uint8_t *in_fr, uint8_t *out_fr)
+void calc_iter(int len, int h, uint32_t num_threads, uint8_t *in_fr, uint8_t *out_fr)
 {
-	for (int p = beg; p != end;) {
-		int next = min(rounddown(p, len) + len, end);
-		int y = p / len;
+#if 0
+	#pragma omp parallel for num_threads(num_threads)
+	for (int i = 0; i < h; ++i) {
 		uint8_t *lin[3], *lout[3];
-		int ind[3] = { modulo(y - 1, h), y, modulo(y + 1, h) };
+		int ind[3] = { modulo(i - 1, h), i, modulo(i + 1, h) };
 		for (int n = 0; n < 3; ++n) {
 			lin[n]  = in_fr  + len * ind[n];
 			lout[n] = out_fr + len * ind[n];
 		}
-		eval_line(lin, lout, len, p - y * len, next - y * len);
-		p = next;
+		eval_line(lin, lout, len, 0, len);
 	}
+#else
+#define BATCH_SZ (CACHE_LINE_SZ * 16)
+	int total_sz = h * len;
+	int n_batch = div_roundup(total_sz, BATCH_SZ);
+
+#pragma omp parallel for num_threads(num_threads) proc_bind(close) schedule(static, 1)
+	for (int b = 0; b < n_batch; ++b) {
+		int beg = b * BATCH_SZ;
+		int end = min(beg + BATCH_SZ, total_sz);
+		for (int p = beg; p != end;) {
+			int next = min(rounddown(p, len) + len, end);
+			int y = p / len;
+			uint8_t *lin[3], *lout[3];
+			int ind[3] = { modulo(y - 1, h), y, modulo(y + 1, h) };
+			for (int n = 0; n < 3; ++n) {
+				lin[n]  = in_fr  + len * ind[n];
+				lout[n] = out_fr + len * ind[n];
+			}
+			eval_line(lin, lout, len, p - y * len, next - y * len);
+			p = next;
+		}
+	}
+#endif
 }
 
 void calc(uint32_t xSize, uint32_t ySize, uint32_t iterations,
@@ -92,31 +114,12 @@ void calc(uint32_t xSize, uint32_t ySize, uint32_t iterations,
 	int len = (int) xSize;
 	int h = (int) ySize;
 	int iter = (int) iterations;
-	uint8_t *inp = inFrame;
-	uint8_t *outp = outFrame;
 
-	int n_tasks = div_roundup(h * len, CACHE_LINE_SZ);
-	int batch_sz = div_roundup(n_tasks, num_threads) * CACHE_LINE_SZ;
-	num_threads = min(num_threads, (unsigned) n_tasks);
-
-	#pragma omp parallel num_threads(num_threads) \
-		firstprivate(len, h, iter, inp, outp, batch_sz)
-	{
-		int tid = omp_get_thread_num();
-		int beg = min(tid * batch_sz, h * len);
-		int end = min(beg + batch_sz, h * len);
-
-		if (beg < end) {
-			for (int i = 0; i < iter; ++i) {
-				calc_iter(len, h, beg, end, inp, outp);
-				std::swap(inp, outp);
-				#pragma omp barrier
-			}
-		}
-	}
-
-	if (iterations % 2 == 0)
+	for (int i = 0; i < iter; ++i) {
+		calc_iter(len, h, num_threads, inFrame, outFrame);
 		std::swap(inFrame, outFrame);
+	}
+	std::swap(inFrame, outFrame);
 }
 
 int main(int argc, char** argv)
