@@ -1,22 +1,23 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#define OMPI_SKIP_MPICXX 1
 #include <mpi.h>
 #include <unistd.h>
 #include <cmath>
 
-void calc(double* arr, uint32_t ySize, uint32_t xSize, int rank, int size)
+#include "../../loop_common.h"
+
+void calc(double *arr, uint32_t ySize, uint32_t xSize, int rank, int size)
 {
-  if (rank == 0 && size > 0)
-  {
-    for (uint32_t y = 0; y < ySize - 1; y++)
-    {
-      for (uint32_t x = 3; x < xSize; x++)
-      {
-        arr[y*xSize + x] = sin(0.00001*arr[(y + 1)*xSize + x - 3]);
-      }
-    }
-  }
+	BCAST(&xSize, 0);
+        BCAST(&ySize, 0);
+
+	for (uint32_t y = 0; y < ySize - 1; y++) {
+		double *line_in  = &arr[(y+1)*xSize];
+		double *line_out = &arr[y*xSize + 3];
+		calc_line(line_in, line_out, xSize - 3, rank, size);
+	}
 }
 
 int main(int argc, char** argv)
