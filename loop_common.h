@@ -12,13 +12,6 @@
         typeof(y) __y = (y);            \
         (__x < __y) ? __x : __y;  })
 
-
-static inline
-double calc_elem(double in)
-{
-        return sin(0.00001*in);
-}
-
 static
 void calc_line(double *arr_in, double *arr_out, int len, int rank, int size)
 {
@@ -35,7 +28,7 @@ void calc_line(double *arr_in, double *arr_out, int len, int rank, int size)
         }
         int truncated = min(task_sz, len - min(task_sz * rank, len));
         if (!truncated)
-                return;
+		return;
         MPI_Scatterv(arr_in, &offs_len[size], &offs_len[0], MPI_DOUBLE,
                         &task[0], task_sz, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 

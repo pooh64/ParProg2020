@@ -7,6 +7,11 @@
 #include <cmath>
 #include <vector>
 
+static inline
+double calc_elem(double in)
+{
+        return sin(0.00001*in);
+}
 #include "../../loop_common.h"
 
 void calc(double* arr, uint32_t ySize, uint32_t xSize, int rank, int size)

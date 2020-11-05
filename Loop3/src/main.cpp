@@ -1,22 +1,28 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#define OMPI_SKIP_MPICXX 1
 #include <mpi.h>
 #include <unistd.h>
 #include <cmath>
 
+static inline
+double calc_elem(double in)
+{
+        return sin(in);
+}
+
+#include "../../loop_common.h"
 void calc(double* arr, uint32_t ySize, uint32_t xSize, int rank, int size)
 {
-  if (rank == 0 && size > 0)
-  {
-    for (uint32_t y = 4; y < ySize; y++)
-    {
-      for (uint32_t x = 0; x < xSize; x++)
-      {
-        arr[y*xSize + x] = sin(arr[(y - 4)*xSize + x]);
-      }
-    }
-  }
+	BCAST(&xSize, 0);
+        BCAST(&ySize, 0);
+
+	for (uint32_t y = 4; y < ySize; y++) {
+		double *line_in  = &arr[(y-4)*xSize];
+		double *line_out = &arr[y*xSize];
+		calc_line(line_in, line_out, xSize, rank, size);
+	}
 }
 
 int main(int argc, char** argv)
