@@ -12,6 +12,15 @@ double calc_elem(double in)
         return sin(in);
 }
 #include "../../loop_common.h"
+
+void calc_line(int len, int rank, int size, double *arr_in, double *arr_out)
+{
+        calc_prep(len, rank, size);
+        calc_scatter(len, rank, size, arr_in);
+        calc_process(len, rank);
+        calc_gather(len, rank, size, arr_out);
+}
+
 void calc(double* arr, uint32_t zSize, uint32_t ySize, uint32_t xSize, int rank, int size)
 {
 	BCAST(&xSize, 0);
@@ -22,7 +31,7 @@ void calc(double* arr, uint32_t zSize, uint32_t ySize, uint32_t xSize, int rank,
 		for (uint32_t y = 0; y < ySize - 1; y++) {
 			double *line_in  = &arr[(z-1)*ySize*xSize + (y+1)*xSize + 1];
 			double *line_out = &arr[z*ySize*xSize + y*xSize];
-			calc_line(line_in, line_out, xSize-1, rank, size);
+			calc_line(xSize-1, rank, size, line_in, line_out);
 		}
 	}
 }

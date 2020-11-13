@@ -12,29 +12,58 @@
         typeof(y) __y = (y);            \
         (__x < __y) ? __x : __y;  })
 
-static
-void calc_line(double *arr_in, double *arr_out, int len, int rank, int size)
-{
-        int const task_sz = div_roundup(len, size);
-        std::vector<double> task(task_sz);
-        std::vector<int> offs_len;
+int			g_task_sz;
+std::vector<double> 	g_task;
+std::vector<int>	g_toff;
+std::vector<int>	g_tlen;
 
+static
+void calc_truncate(int len, int rank, int size)
+{
         if (!rank) {
-                offs_len.resize(2 * size);
+                g_toff.resize(size);
+		g_tlen.resize(size);
                 for (int i = 0; i < size; ++i) {
-                        offs_len[i] = min(task_sz * i, len);
-                        offs_len[i+size] = min(task_sz, len - offs_len[i]);
+                        g_toff[i] = min(g_task_sz * i, len);
+                        g_tlen[i] = min(g_task_sz, len - g_toff[i]);
                 }
         }
-        int truncated = min(task_sz, len - min(task_sz * rank, len));
-        if (!truncated)
+}
+
+static
+void calc_prep(int len, int rank, int size)
+{
+        g_task_sz = div_roundup(len, size);
+        g_task.resize(g_task_sz);
+	calc_truncate(len, rank, size);
+}
+
+static
+void calc_scatter(int len, int rank, int size, double *arr)
+{
+	(void) size;
+	int truncated = min(g_task_sz, len - min(g_task_sz * rank, len));
+	if (!truncated)
 		return;
-        MPI_Scatterv(arr_in, &offs_len[size], &offs_len[0], MPI_DOUBLE,
-                        &task[0], task_sz, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(arr, &g_tlen[0], &g_toff[0], MPI_DOUBLE,
+			&g_task[0], g_task_sz, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+}
 
+static
+void calc_process(int len, int rank)
+{
+	int truncated = min(g_task_sz, len - min(g_task_sz * rank, len));
         for (int i = 0; i < truncated; ++i)
-                task[i] = calc_elem(task[i]);
+                g_task[i] = calc_elem(g_task[i]);
+}
 
-        MPI_Gatherv(&task[0], truncated, MPI_DOUBLE,
-                        arr_out, &offs_len[size], &offs_len[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+static
+void calc_gather(int len, int rank, int size, double *arr)
+{
+	(void) size;
+	int truncated = min(g_task_sz, len - min(g_task_sz * rank, len));
+	if (!truncated)
+		return;
+        MPI_Gatherv(&g_task[0], truncated, MPI_DOUBLE,
+                        arr, &g_tlen[0], &g_toff[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
 }

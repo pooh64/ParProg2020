@@ -18,10 +18,19 @@ void calc(double* arr, uint32_t ySize, uint32_t xSize, int rank, int size)
 	BCAST(&xSize, 0);
         BCAST(&ySize, 0);
 
-	for (uint32_t y = 4; y < ySize; y++) {
-		double *line_in  = &arr[(y-4)*xSize];
-		double *line_out = &arr[y*xSize];
-		calc_line(line_in, line_out, xSize, rank, size);
+	uint32_t len = 4 * xSize;
+	uint32_t arr_sz = ySize*xSize;
+	if (arr_sz <= len)
+		return;
+	calc_prep(len, rank, size);
+	calc_scatter(len, rank, size, arr);
+
+	for (uint32_t y = 4; y < ySize; y+=4) {
+		uint32_t trunc = min(arr_sz - y*xSize, len);
+		if (trunc != len)
+			calc_truncate(trunc, rank, size);
+		calc_process(trunc, rank);
+		calc_gather(trunc, rank, size, &arr[y*xSize]);
 	}
 }
 

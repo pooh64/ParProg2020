@@ -13,6 +13,14 @@ double calc_elem(double in)
 }
 #include "../../loop_common.h"
 
+void calc_line(int len, int rank, int size, double *arr_in, double *arr_out)
+{
+        calc_prep(len, rank, size);
+        calc_scatter(len, rank, size, arr_in);
+        calc_process(len, rank);
+        calc_gather(len, rank, size, arr_out);
+}
+
 void calc(double *arr, uint32_t ySize, uint32_t xSize, int rank, int size)
 {
 	BCAST(&xSize, 0);
@@ -21,7 +29,7 @@ void calc(double *arr, uint32_t ySize, uint32_t xSize, int rank, int size)
 	for (uint32_t y = 0; y < ySize - 1; y++) {
 		double *line_in  = &arr[(y+1)*xSize];
 		double *line_out = &arr[y*xSize + 3];
-		calc_line(line_in, line_out, xSize - 3, rank, size);
+		calc_line(xSize - 3, rank, size, line_in, line_out);
 	}
 }
 
