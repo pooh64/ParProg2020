@@ -5,7 +5,11 @@
 
 #define div_roundup(x, y) ({            \
         typeof(y) __y = y;              \
-        (((x) + (__y - 1)) / __y); })
+        ((x) + __y - 1) / __y; })
+
+#define roundup(x, y) ({			\
+	typeof(y) __y = y;			\
+	(((x) + __y - 1) / __y) * __y; })
 
 #define min(x, y) ({                    \
         typeof(x) __x = (x);            \
@@ -13,12 +17,12 @@
         (__x < __y) ? __x : __y;  })
 
 int			g_task_sz;
+int			g_self_len;
 std::vector<double> 	g_task;
 std::vector<int>	g_toff;
 std::vector<int>	g_tlen;
 
-static
-void calc_truncate(int len, int rank, int size)
+void calc_truncate(int rank, int size, int len)
 {
         if (!rank) {
                 g_toff.resize(size);
@@ -28,42 +32,54 @@ void calc_truncate(int len, int rank, int size)
                         g_tlen[i] = min(g_task_sz, len - g_toff[i]);
                 }
         }
+	g_self_len = min(g_task_sz, len - min(g_task_sz * rank, len));
+        g_task.resize(g_self_len);
 }
 
-static
-void calc_prep(int len, int rank, int size)
+void calc_tasks_pad(int rank, int size, int pad)
+{
+	if (!rank) {
+		for (int i = 0; i < size; ++i)
+			g_tlen[i] += pad;
+	}
+	g_self_len += pad;
+	g_task.resize(g_self_len);
+}
+
+void calc_prep(int rank, int size, int len, int align)
 {
         g_task_sz = div_roundup(len, size);
-        g_task.resize(g_task_sz);
-	calc_truncate(len, rank, size);
+	if (align)
+		g_task_sz = roundup(g_task_sz, align);
+	calc_truncate(rank, size, len);
 }
 
-static
-void calc_scatter(int len, int rank, int size, double *arr)
+void calc_scatter(double *arr)
 {
-	(void) size;
-	int truncated = min(g_task_sz, len - min(g_task_sz * rank, len));
-	if (!truncated)
+	if (!g_self_len)
 		return;
 	MPI_Scatterv(arr, &g_tlen[0], &g_toff[0], MPI_DOUBLE,
-			&g_task[0], g_task_sz, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			&g_task[0], g_self_len, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 }
 
-static
-void calc_process(int len, int rank)
+void calc_process()
 {
-	int truncated = min(g_task_sz, len - min(g_task_sz * rank, len));
-        for (int i = 0; i < truncated; ++i)
-                g_task[i] = calc_elem(g_task[i]);
+	for (int i = 0; i < g_self_len; ++i)
+		g_task[i] = calc_elem(g_task[i]);
 }
 
-static
-void calc_gather(int len, int rank, int size, double *arr)
+void calc_gather(double *arr)
 {
-	(void) size;
-	int truncated = min(g_task_sz, len - min(g_task_sz * rank, len));
-	if (!truncated)
+	if (!g_self_len)
 		return;
-        MPI_Gatherv(&g_task[0], truncated, MPI_DOUBLE,
+        MPI_Gatherv(&g_task[0], g_self_len, MPI_DOUBLE,
                         arr, &g_tlen[0], &g_toff[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+}
+
+void calc_line(int rank, int size, int len, double *arr_in, double *arr_out)
+{
+        calc_prep(rank, size, len, 0);
+        calc_scatter(arr_in);
+        calc_process();
+        calc_gather(arr_out);
 }

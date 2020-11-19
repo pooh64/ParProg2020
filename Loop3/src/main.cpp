@@ -22,15 +22,15 @@ void calc(double* arr, uint32_t ySize, uint32_t xSize, int rank, int size)
 	uint32_t arr_sz = ySize*xSize;
 	if (arr_sz <= len)
 		return;
-	calc_prep(len, rank, size);
-	calc_scatter(len, rank, size, arr);
+	calc_prep(rank, size, len, 0);
+	calc_scatter(arr);
 
 	for (uint32_t y = 4; y < ySize; y+=4) {
 		uint32_t trunc = min(arr_sz - y*xSize, len);
 		if (trunc != len)
-			calc_truncate(trunc, rank, size);
-		calc_process(trunc, rank);
-		calc_gather(trunc, rank, size, &arr[y*xSize]);
+			calc_truncate(rank, size, trunc);
+		calc_process();
+		calc_gather(&arr[y*xSize]);
 	}
 }
 

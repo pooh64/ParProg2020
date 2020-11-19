@@ -13,25 +13,43 @@ double calc_elem(double in)
 }
 #include "../../loop_common.h"
 
-void calc_line(int len, int rank, int size, double *arr_in, double *arr_out)
+#if 0
+void calc(double *arr, uint32_t ySize, uint32_t xSize, int rank, int size)
 {
-        calc_prep(len, rank, size);
-        calc_scatter(len, rank, size, arr_in);
-        calc_process(len, rank);
-        calc_gather(len, rank, size, arr_out);
+	BCAST(&xSize, 0);
+	BCAST(&ySize, 0);
+
+	for (uint32_t y = 0; y < ySize - 1; y++) {
+		double *line_in  = &arr[(y+1)*xSize];
+		double *line_out = &arr[y*xSize + 3];
+		calc_line(rank, size, xSize - 3, line_in, line_out);
+	}
+}
+#else
+void process(int xSize)
+{
+	int ySize = g_self_len / xSize;
+
+	for (int y = 0; y < ySize - 1; ++y) {
+		for (int x = 3; x < xSize; ++x)
+			g_task[y*xSize + x] = calc_elem(g_task[(y+1)*xSize + x-3]);
+	}
 }
 
 void calc(double *arr, uint32_t ySize, uint32_t xSize, int rank, int size)
 {
 	BCAST(&xSize, 0);
-        BCAST(&ySize, 0);
+	BCAST(&ySize, 0);
+	
+	calc_prep(rank, size, xSize * (ySize - 1), (int) xSize);
+	calc_tasks_pad(rank, size, (int) xSize);
+	calc_scatter(arr);
 
-	for (uint32_t y = 0; y < ySize - 1; y++) {
-		double *line_in  = &arr[(y+1)*xSize];
-		double *line_out = &arr[y*xSize + 3];
-		calc_line(xSize - 3, rank, size, line_in, line_out);
-	}
+	process((int) xSize);
+	calc_tasks_pad(rank, size, -xSize);
+	calc_gather(arr);
 }
+#endif
 
 int main(int argc, char** argv)
 {
