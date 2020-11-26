@@ -1,7 +1,7 @@
 #! /bin/bash
 # run.sh <number of repetitions>
 compiler="mpic++"
-flags="-std=c++11 -Wall -Wextra -Werror"
+flags="-std=gnu++11 -O2 -Wall -Wextra -Werror"
 src="./src/main.cpp"
 build="./build"
 exe="$build/task"
@@ -29,9 +29,9 @@ for test_dir in $tests_dir/*; do
   for proc in {1..4}; do
     test="$(basename $test_dir)_p$proc"
     printf "\n[TEST $test]\n"
-    echo "mpiexec -np $proc $exe $test_dir/input.txt $build/$test.txt"
+    echo "mpiexec --oversubscribe -np $proc $exe $test_dir/input.txt $build/$test.txt"
     START=$(date +%s%N)
-    mpiexec -np $proc $exe $test_dir/input.txt $build/$test.txt
+    mpiexec --oversubscribe -np $proc $exe $test_dir/input.txt $build/$test.txt
     END=$(date +%s%N)
     DIFF=$((($END - $START)/1000000))
     if [ ! $? -eq 0 ]; then
