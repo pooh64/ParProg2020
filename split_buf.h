@@ -3,6 +3,9 @@
 
 #define BCAST(ptr, root) MPI_Bcast((ptr), sizeof(*(ptr)), MPI_CHAR, (root), MPI_COMM_WORLD)
 
+#define SEND(dest, buf, size) MPI_Send(buf, size, MPI_CHAR, dest, 0, MPI_COMM_WORLD)
+#define RECV(src,  buf, size) MPI_Send(buf, size, MPI_CHAR, src,  0, MPI_COMM_WORLD)
+
 #define div_roundup(x, y) ({            \
         typeof(y) __y = y;              \
         ((x) + __y - 1) / __y; })
