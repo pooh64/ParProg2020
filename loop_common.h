@@ -17,7 +17,7 @@
         (__x < __y) ? __x : __y;  })
 
 int			g_task_sz;
-int			g_self_len;
+int			g_self_len, g_self_off;
 std::vector<double> 	g_task;
 std::vector<int>	g_toff;
 std::vector<int>	g_tlen;
@@ -32,7 +32,8 @@ void calc_truncate(int rank, int size, int len)
                         g_tlen[i] = min(g_task_sz, len - g_toff[i]);
                 }
         }
-	g_self_len = min(g_task_sz, len - min(g_task_sz * rank, len));
+	g_self_off = min(g_task_sz * rank, len); 
+	g_self_len = min(g_task_sz, len - g_self_off);
         g_task.resize(g_self_len);
 }
 

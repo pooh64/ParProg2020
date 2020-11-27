@@ -1,41 +1,102 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#define OMPI_SKIP_MPICXX 1
 #include <mpi.h>
 #include <unistd.h>
 #include <cmath>
+#include <cassert>
 
+#include "../../split_buf.h"
+
+static inline
 double acceleration(double t)
 {
   return sin(t);
 }
 
-void calc(double* trace, uint32_t traceSize, double t0, double dt, double y0, double y1, int rank, int size)
+struct calc_pass_data {
+	double y0;
+	double v0;
+};
+
+void calc_process(double *arr, int len, struct calc_pass_data &data, double t0, double dt)
 {
-  // Sighting shot
-  double v0 = 0;
-  if (rank == 0 && size > 0)
-  {
-    trace[0] = y0;
-    trace[1] = y0 + dt*v0;
-    for (uint32_t i = 2; i < traceSize; i++)
-    {
-      trace[i] = dt*dt*acceleration(t0 + (i - 1)*dt) + 2*trace[i - 1] - trace[i - 2];
-    }
-  }
+	assert(len > 2);
+	for (int i = 0; i < 2; ++i)
+		arr[i] = 0;
 
-  // The final shot
-  if (rank == 0 && size > 0)
-  {
-    v0 = (y1 - trace[traceSize - 1])/(dt*traceSize);
-    trace[0] = y0;
-    trace[1] = y0 + dt*v0;
-    for (uint32_t i = 2; i < traceSize; i++)
-    {
-      trace[i] = dt*dt*acceleration(t0 + (i - 1)*dt) + 2*trace[i - 1] - trace[i - 2];
-    }
-  }
+	for (int i = 2; i < len; ++i)
+		arr[i] = dt*dt*acceleration(t0+(i-1)*dt) + 2*arr[i-1] - arr[i-2];
 
+	data.y0 = dt*dt*acceleration(t0+(len-1)*dt) + 2*arr[len-1] - arr[len-2];
+	data.v0 = (3*data.y0 - 4*arr[len-1] + arr[len-2]) / (2*dt);
+
+	//data.y0 = arr[len-1];
+	//data.v0 = (arr[len-1] - arr[len-2]) / dt;
+	//data.v0 = (3*arr[len-1] - 4*arr[len-2] + arr[len-3]) / (2*dt);
+}
+
+void calc_aim(split_buf<double> &task, std::vector<calc_pass_data> &pass_buf,
+		double y0, double y1, double dt, int len)
+{
+	double v0 = 0;
+	calc_pass_data pd = pass_buf[0];
+	pass_buf[0].y0 = y0;
+	pass_buf[0].v0 = 0;
+	for (unsigned i = 1; i < pass_buf.size(); ++i) {
+		calc_pass_data tmp = pass_buf[i];
+		pass_buf[i].v0 = pass_buf[i-1].v0 + pd.v0;
+		pass_buf[i].y0 = pass_buf[i-1].y0 + pd.y0 + pass_buf[i-1].v0 * task.blen[i-1] * dt;
+		pd = tmp;
+	}
+	unsigned last = pass_buf.size() - 1;
+	double y_pr = pass_buf[last].y0 + pd.y0 + pass_buf[last].v0 * task.blen[last] * dt;
+	v0 = (y1 - y_pr) / (dt * len);
+	pass_buf[0].v0 = v0;
+	double y_delta = 0;
+	for (unsigned i = 1; i < pass_buf.size(); ++i) {
+		pass_buf[i].v0 += v0;
+		y_delta += v0 * task.blen[i-1] * dt;
+		pass_buf[i].y0 += y_delta;
+	}
+}
+
+void calc_correct(double *arr, int len, struct calc_pass_data data, double dt)
+{
+	data.v0 *= dt;
+	for (int i = 0; i < len; ++i)
+		arr[i] += data.y0 + data.v0 * i;
+}
+
+void calc(double *trace, uint32_t traceSize, double t0, double dt, double y0, double y1, int rank, int size)
+{
+	BCAST(&traceSize, 0);
+	BCAST(&t0, 0);
+	BCAST(&dt, 0);
+
+	split_buf<double>		task(rank, size);
+	split_buf<calc_pass_data>	pass(rank, size);
+	std::vector<calc_pass_data>	pass_buf(size);
+
+	task.split(traceSize-1, 0);
+	pass.set_each(1);
+
+	calc_process(task.get(), task.buf_len, *pass.get(), t0+task.buf_off*dt, dt);
+
+	pass.gather(&pass_buf[0]);
+	if (!rank)
+		calc_aim(task, pass_buf, y0, y1, dt, traceSize-1);
+	pass.scatter(&pass_buf[0]);
+
+	calc_correct(task.get(), task.buf_len, *pass.get(), dt);
+	task.gather(trace);
+
+	if (!rank) {
+		trace[traceSize-1] = y1;
+		for (unsigned i = 4; i > 0; --i)
+			std::cout << trace[traceSize - i] << std::endl;
+	}
 }
 
 int main(int argc, char** argv)
