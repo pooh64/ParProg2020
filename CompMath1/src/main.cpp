@@ -29,13 +29,16 @@ void calc_process(double *arr, int len, struct calc_pass_data &data, double t0, 
 	for (int i = 2; i < len; ++i)
 		arr[i] = dt*dt*acceleration(t0+(i-1)*dt) + 2*arr[i-1] - arr[i-2];
 
-	data.y0 = arr[len-1];
+	data.y0 = dt*dt*acceleration(t0+(len-1)*dt) + 2*arr[len-1] - arr[len-2];
+	data.v0 = (3*data.y0 - 4*arr[len-1] + arr[len-2]) / (2*dt);
+
+	//data.y0 = arr[len-1];
 	//data.v0 = (arr[len-1] - arr[len-2]) / dt;
-	data.v0 = (3*arr[len-1] - 4*arr[len-2] + arr[len-3]) / (2*dt);
+	//data.v0 = (3*arr[len-1] - 4*arr[len-2] + arr[len-3]) / (2*dt);
 }
 
 void calc_aim(split_buf<double> &task, std::vector<calc_pass_data> &pass_buf,
-		double y0, double y1, double dt, int traceSize)
+		double y0, double y1, double dt, int len)
 {
 	double v0 = 0;
 	calc_pass_data pd = pass_buf[0];
@@ -49,7 +52,7 @@ void calc_aim(split_buf<double> &task, std::vector<calc_pass_data> &pass_buf,
 	}
 	unsigned last = pass_buf.size() - 1;
 	double y_pr = pass_buf[last].y0 + pd.y0 + pass_buf[last].v0 * task.blen[last] * dt;
-	v0 = (y1 - y_pr) / (dt * traceSize);
+	v0 = (y1 - y_pr) / (dt * len);
 	pass_buf[0].v0 = v0;
 	double y_delta = 0;
 	for (unsigned i = 1; i < pass_buf.size(); ++i) {
@@ -76,18 +79,24 @@ void calc(double *trace, uint32_t traceSize, double t0, double dt, double y0, do
 	split_buf<calc_pass_data>	pass(rank, size);
 	std::vector<calc_pass_data>	pass_buf(size);
 
-	task.split(traceSize, 0);
+	task.split(traceSize-1, 0);
 	pass.set_each(1);
 
 	calc_process(task.get(), task.buf_len, *pass.get(), t0+task.buf_off*dt, dt);
 
 	pass.gather(&pass_buf[0]);
 	if (!rank)
-		calc_aim(task, pass_buf, y0, y1, dt, traceSize);
+		calc_aim(task, pass_buf, y0, y1, dt, traceSize-1);
 	pass.scatter(&pass_buf[0]);
 
 	calc_correct(task.get(), task.buf_len, *pass.get(), dt);
 	task.gather(trace);
+
+	if (!rank) {
+		trace[traceSize-1] = y1;
+		for (unsigned i = 4; i > 0; --i)
+			std::cout << trace[traceSize - i] << std::endl;
+	}
 }
 
 int main(int argc, char** argv)
